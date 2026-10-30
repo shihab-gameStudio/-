@@ -19,6 +19,51 @@ export class ThreeSceneManager {
   acc: number = 0;
   currentLookAt = new THREE.Vector3();
   isFirstFrameCamera = true;
+  private cameraPresetIndex = 0;
+  private cameraZoom = 1;
+  private orbitYaw = 0;
+  private orbitPitch = 0;
+  private draggingPointer: number | null = null;
+  private lastPointerX = 0;
+  private lastPointerY = 0;
+  private lastDragTime = 0;
+  private readonly raycaster = new THREE.Raycaster();
+  private readonly cameraPresets = [
+    { label: 'Chase', distance: 9.2, pitch: 0.38 },
+    { label: 'Close', distance: 6.9, pitch: 0.29 },
+    { label: 'Wide', distance: 13.5, pitch: 0.56 }
+  ];
+
+  private readonly pointerDown = (e: PointerEvent) => {
+    if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 2) return;
+    this.draggingPointer = e.pointerId;
+    this.lastPointerX = e.clientX;
+    this.lastPointerY = e.clientY;
+    this.lastDragTime = performance.now();
+    this.renderer.domElement.setPointerCapture(e.pointerId);
+  };
+  private readonly pointerMove = (e: PointerEvent) => {
+    if (this.draggingPointer !== e.pointerId) return;
+    const dx = e.clientX - this.lastPointerX;
+    const dy = e.clientY - this.lastPointerY;
+    this.lastPointerX = e.clientX;
+    this.lastPointerY = e.clientY;
+    this.orbitYaw -= dx * 0.0055;
+    this.orbitPitch = THREE.MathUtils.clamp(this.orbitPitch + dy * 0.0035, -0.22, 0.3);
+    this.lastDragTime = performance.now();
+  };
+  private readonly pointerUp = (e: PointerEvent) => {
+    if (this.draggingPointer !== e.pointerId) return;
+    this.draggingPointer = null;
+    this.lastDragTime = performance.now();
+    if (this.renderer.domElement.hasPointerCapture(e.pointerId))
+      this.renderer.domElement.releasePointerCapture(e.pointerId);
+  };
+  private readonly wheelZoom = (e: WheelEvent) => {
+    e.preventDefault();
+    this.cameraZoom = THREE.MathUtils.clamp(this.cameraZoom + Math.sign(e.deltaY) * 0.085, 0.72, 1.52);
+  };
+  private readonly preventContextMenu = (e: MouseEvent) => e.preventDefault();
 
   constructor(container: HTMLElement, onUpdateHUD: () => void, onEvent: (type: string, data?: any) => void) {
     this.container = container;
@@ -37,6 +82,14 @@ export class ThreeSceneManager {
     this.renderer.toneMappingExposure = 1.55;
     
     container.replaceChildren(this.renderer.domElement);
+    const canvas = this.renderer.domElement;
+    canvas.style.touchAction = 'none';
+    canvas.addEventListener('pointerdown', this.pointerDown);
+    canvas.addEventListener('pointermove', this.pointerMove);
+    canvas.addEventListener('pointerup', this.pointerUp);
+    canvas.addEventListener('pointercancel', this.pointerUp);
+    canvas.addEventListener('wheel', this.wheelZoom, { passive: false });
+    canvas.addEventListener('contextmenu', this.preventContextMenu);
 
     this.scene.add(new THREE.HemisphereLight(0xe6f2ff, 0x9c8065, 2.15));
     const sun = new THREE.DirectionalLight(0xffecd0, 2.55);
@@ -52,6 +105,7 @@ export class ThreeSceneManager {
 
     this.clock = new THREE.Clock();
     this.buildWorld();
+    this.scene.updateMatrixWorld(true);
   }
 
   matte(color: string, roughness = 0.92) {
@@ -342,51 +396,65 @@ export class ThreeSceneManager {
     }
   }
 
-  updateCamera(playerPosition: THREE.Vector3, heading: number) {
-    const forward = new THREE.Vector3(Math.sin(heading), 0, -Math.cos(heading));
-    let effectiveOffset = 11; // Camera's offset distance
-    const offsetHeight = 7;
+  resetCamera() {
+    this.isFirstFrameCamera = true;
+    this.orbitYaw = 0;
+    this.orbitPitch = 0;
+    this.cameraZoom = 1;
+    this.draggingPointer = null;
+    this.lastDragTime = 0;
+  }
 
-    // Player head/origin position
-    const origin = playerPosition.clone().add(new THREE.Vector3(0, 2, 0));
+  cycleCameraPreset(): string {
+    this.cameraPresetIndex = (this.cameraPresetIndex + 1) % this.cameraPresets.length;
+    return this.cameraPresets[this.cameraPresetIndex].label;
+  }
 
-    // Ideal camera position without collision
-    const idealCamPos = playerPosition.clone()
-      .addScaledVector(forward, -effectiveOffset)
-      .add(new THREE.Vector3(0, offsetHeight, 0));
-
-    // Instantiate a THREE.Raycaster per frame
-    const raycaster = new THREE.Raycaster();
-
-    const direction = new THREE.Vector3().subVectors(idealCamPos, origin);
-    const totalDistance = direction.length();
-    direction.normalize();
-
-    raycaster.set(origin, direction);
-    raycaster.far = totalDistance;
-
-    // Check for intersections between player and camera against building meshes
-    const intersects = raycaster.intersectObjects(this.buildingMeshes, false);
-    if (intersects.length > 0) {
-      const hitDistance = intersects[0].distance;
-      // Reduce the camera's offset distance to pull it forward, preventing clipping through geometry
-      effectiveOffset = Math.max(1.5, hitDistance - 0.7);
+  updateCamera(playerPosition: THREE.Vector3, heading: number, dt = 1 / 60) {
+    const frameDt = Math.max(0, Math.min(0.05, dt));
+    // Return gently behind the moving character after the player finishes looking around.
+    if (this.draggingPointer === null && performance.now() - this.lastDragTime > 1300) {
+      this.orbitYaw *= Math.exp(-1.75 * frameDt);
+      if (Math.abs(this.orbitYaw) < 0.001) this.orbitYaw = 0;
     }
 
-    const targetCamPos = playerPosition.clone()
-      .addScaledVector(forward, -effectiveOffset)
-      .add(new THREE.Vector3(0, offsetHeight, 0));
+    const preset = this.cameraPresets[this.cameraPresetIndex];
+    const pitch = THREE.MathUtils.clamp(preset.pitch + this.orbitPitch, 0.15, 0.89);
+    const distance = preset.distance * this.cameraZoom;
+    const yaw = heading + this.orbitYaw;
+    const forward = new THREE.Vector3(Math.sin(heading), 0, -Math.cos(heading));
+    const anchor = playerPosition.clone()
+      .add(new THREE.Vector3(0, 1.72, 0))
+      .addScaledVector(forward, 0.25);
+    const look = anchor.clone().addScaledVector(forward, 1.6);
+    const desiredPosition = anchor.clone().add(new THREE.Vector3(
+      -Math.sin(yaw) * distance * Math.cos(pitch),
+      distance * Math.sin(pitch),
+      Math.cos(yaw) * distance * Math.cos(pitch)
+    ));
 
-    // Lerp camera position for smooth movement
-    this.camera.position.lerp(targetCamPos, 0.12);
+    // Move camera *along the ray* to the nearest obstruction; distance along the
+    // diagonal ray must not be substituted for horizontal camera distance.
+    const ray = desiredPosition.clone().sub(anchor);
+    const rayLength = ray.length();
+    ray.normalize();
+    this.raycaster.set(anchor, ray);
+    this.raycaster.near = 0;
+    this.raycaster.far = rayLength;
+    const hit = this.raycaster.intersectObjects(this.buildingMeshes, false)[0];
+    if (hit) desiredPosition.copy(anchor).addScaledVector(ray, Math.max(1.0, hit.distance - 0.45));
 
-    // Lerp target focus (lookAt) for smooth movement and reduced jitter during high-speed chases
-    const idealLookAt = playerPosition.clone().addScaledVector(forward, 4).add(new THREE.Vector3(0, 2.2, 0));
+    const follow = 1 - Math.exp(-13 * frameDt);
+    const aim = 1 - Math.exp(-16 * frameDt);
     if (this.isFirstFrameCamera) {
-      this.currentLookAt.copy(idealLookAt);
+      this.camera.position.copy(desiredPosition);
+      this.currentLookAt.copy(look);
       this.isFirstFrameCamera = false;
     } else {
-      this.currentLookAt.lerp(idealLookAt, 0.15);
+      // Never interpolate through a wall when the view becomes obstructed.
+      if (hit) this.camera.position.copy(desiredPosition);
+      else this.camera.position.lerp(desiredPosition, follow);
+      this.currentLookAt.lerp(look, aim);
     }
     this.camera.lookAt(this.currentLookAt);
   }
@@ -401,6 +469,13 @@ export class ThreeSceneManager {
 
   destroy() {
     cancelAnimationFrame(this.animId);
+    const canvas = this.renderer.domElement;
+    canvas.removeEventListener('pointerdown', this.pointerDown);
+    canvas.removeEventListener('pointermove', this.pointerMove);
+    canvas.removeEventListener('pointerup', this.pointerUp);
+    canvas.removeEventListener('pointercancel', this.pointerUp);
+    canvas.removeEventListener('wheel', this.wheelZoom);
+    canvas.removeEventListener('contextmenu', this.preventContextMenu);
     this.renderer.dispose();
   }
 }

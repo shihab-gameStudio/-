@@ -344,16 +344,18 @@ export class ThreeSceneManager {
 
   updateCamera(playerPosition: THREE.Vector3, heading: number) {
     const forward = new THREE.Vector3(Math.sin(heading), 0, -Math.cos(heading));
-    const offsetDistance = 11;
+    let effectiveOffset = 11; // Camera's offset distance
     const offsetHeight = 7;
-    const idealCamPos = playerPosition.clone()
-      .addScaledVector(forward, -offsetDistance)
-      .add(new THREE.Vector3(0, offsetHeight, 0));
 
     // Player head/origin position
     const origin = playerPosition.clone().add(new THREE.Vector3(0, 2, 0));
 
-    // Instantiate a THREE.Raycaster per frame as requested
+    // Ideal camera position without collision
+    const idealCamPos = playerPosition.clone()
+      .addScaledVector(forward, -effectiveOffset)
+      .add(new THREE.Vector3(0, offsetHeight, 0));
+
+    // Instantiate a THREE.Raycaster per frame
     const raycaster = new THREE.Raycaster();
 
     const direction = new THREE.Vector3().subVectors(idealCamPos, origin);
@@ -363,16 +365,17 @@ export class ThreeSceneManager {
     raycaster.set(origin, direction);
     raycaster.far = totalDistance;
 
-    // Check intersection against building obstacle objects
+    // Check for intersections between player and camera against building meshes
     const intersects = raycaster.intersectObjects(this.buildingMeshes, false);
-
-    let targetCamPos = idealCamPos;
     if (intersects.length > 0) {
       const hitDistance = intersects[0].distance;
-      // Adjust camera position forward along the vector (closer to player) so it stays in front of obstructing geometry
-      const safeDistance = Math.max(1.5, hitDistance - 0.7);
-      targetCamPos = origin.clone().addScaledVector(direction, safeDistance);
+      // Reduce the camera's offset distance to pull it forward, preventing clipping through geometry
+      effectiveOffset = Math.max(1.5, hitDistance - 0.7);
     }
+
+    const targetCamPos = playerPosition.clone()
+      .addScaledVector(forward, -effectiveOffset)
+      .add(new THREE.Vector3(0, offsetHeight, 0));
 
     // Lerp camera position for smooth movement
     this.camera.position.lerp(targetCamPos, 0.12);

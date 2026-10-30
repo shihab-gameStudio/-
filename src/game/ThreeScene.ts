@@ -8,6 +8,7 @@ export class ThreeSceneManager {
   renderer: THREE.WebGLRenderer;
   clock: THREE.Clock;
   obstacles: { x: number; z: number; hw: number; hd: number }[] = [];
+  buildingMeshes: THREE.Mesh[] = [];
   customers: { mesh: THREE.Group; phase: number; drift: number }[] = [];
   traffic: { mesh: THREE.Group; vertical: boolean; v: number }[] = [];
   human!: THREE.Group;
@@ -55,12 +56,15 @@ export class ThreeSceneManager {
     return new THREE.MeshStandardMaterial({ color, roughness });
   }
 
-  block(p: THREE.Object3D, w: number, h: number, d: number, m: THREE.Material, x = 0, y = h / 2, z = 0, cast = true) {
+  block(p: THREE.Object3D, w: number, h: number, d: number, m: THREE.Material, x = 0, y = h / 2, z = 0, cast = true, trackForRaycast = false) {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
     mesh.position.set(x, y, z);
     mesh.castShadow = cast;
     mesh.receiveShadow = true;
     p.add(mesh);
+    if (trackForRaycast) {
+      this.buildingMeshes.push(mesh);
+    }
     return mesh;
   }
 
@@ -167,7 +171,7 @@ export class ThreeSceneManager {
     const buildBuilding = (x: number, z: number) => {
       const h = this.rand(10, 31), color = this.pick(palette), width = this.rand(17, 23), depth = this.rand(17, 23);
       const facade = this.matte(color);
-      this.block(this.scene, width, h, depth, facade, x, h / 2, z);
+      this.block(this.scene, width, h, depth, facade, x, h / 2, z, true, true);
       this.block(this.scene, width + 1, 0.5, depth + 1, mat.concrete, x, h + 0.25, z);
       const faces = Math.max(2, Math.floor(h / 3.4));
       for (let f = 0; f < faces; f++) {
@@ -310,7 +314,7 @@ export class ThreeSceneManager {
         }
         const signBoard = this.block(frame, 1.65, 0.53, 0.12, this.matte('#216a58'), 0, 1.85, 0.79);
         signBoard.castShadow = false;
-        this.sign(frame, 'ঠেলা ঢাকা', 0, 1.85, 0.86, 1.55);
+        this.sign(frame, 'ঠেলার নাম বাবাজি', 0, 1.85, 0.86, 1.55);
         for (const xx of [-0.55, 0.55]) {
           this.block(frame, 0.09, 0.14, 1.45, mat.metal, xx, 1.05, -0.87);
         }
@@ -336,12 +340,50 @@ export class ThreeSceneManager {
     }
   }
 
+  updateCamera(playerPosition: THREE.Vector3, heading: number) {
+    const forward = new THREE.Vector3(Math.sin(heading), 0, -Math.cos(heading));
+    const offsetDistance = 11;
+    const offsetHeight = 7;
+    const idealCamPos = playerPosition.clone()
+      .addScaledVector(forward, -offsetDistance)
+      .add(new THREE.Vector3(0, offsetHeight, 0));
+
+    // Player head/origin position
+    const origin = playerPosition.clone().add(new THREE.Vector3(0, 2, 0));
+
+    // Instantiate a THREE.Raycaster per frame as requested
+    const raycaster = new THREE.Raycaster();
+
+    const direction = new THREE.Vector3().subVectors(idealCamPos, origin);
+    const totalDistance = direction.length();
+    direction.normalize();
+
+    raycaster.set(origin, direction);
+    raycaster.far = totalDistance;
+
+    // Check intersection against building obstacle objects
+    const intersects = raycaster.intersectObjects(this.buildingMeshes, false);
+
+    let targetCamPos = idealCamPos;
+    if (intersects.length > 0) {
+      const hitDistance = intersects[0].distance;
+      // Adjust camera position forward along the vector (closer to player) so it stays in front of obstructing geometry
+      const safeDistance = Math.max(1.5, hitDistance - 0.7);
+      targetCamPos = origin.clone().addScaledVector(direction, safeDistance);
+    }
+
+    this.camera.position.lerp(targetCamPos, 0.15);
+
+    const lookAtTarget = playerPosition.clone().addScaledVector(forward, 4).add(new THREE.Vector3(0, 2.2, 0));
+    this.camera.lookAt(lookAtTarget);
+  }
+
   resize() {
     if (!this.container) return;
     this.camera.aspect = this.container.clientWidth / this.container.clientHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.7));
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.7));
   }
 
   destroy() {

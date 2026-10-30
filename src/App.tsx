@@ -608,13 +608,9 @@ export default function App() {
         };
       });
 
-      // Camera follow
+      // Camera follow with Raycaster obstacle anti-clip check
       const p = state.role === 'vendor' ? mgr.human : mgr.officer;
-      const forward = new THREE.Vector3(Math.sin(state.heading), 0, -Math.cos(state.heading));
-      const target = p.position.clone().addScaledVector(forward, -11).add(new THREE.Vector3(0, 7, 0));
-      mgr.camera.position.lerp(target, 0.08);
-      const look = p.position.clone().addScaledVector(forward, 5).add(new THREE.Vector3(0, 2.2, 0));
-      mgr.camera.lookAt(look);
+      mgr.updateCamera(p.position, state.heading);
 
       mgr.renderer.render(mgr.scene, mgr.camera);
       animId = requestAnimationFrame(loop);

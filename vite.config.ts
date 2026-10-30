@@ -5,6 +5,8 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
+    // Keep the AI Studio/dev preview at /; GitHub Pages project builds use /-/.
+    base: process.env.GITHUB_PAGES === 'true' ? '/-/' : '/',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {

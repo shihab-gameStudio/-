@@ -124,10 +124,10 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               {isVendor
                 ? state.sale
                   ? 'Stay near the customer until sale finishes.'
-                  : `WASD move · E sell · Space sprint · U upgrade (৳${130 + state.level * 85}) · R restock${
+                  : `W/S drive · A/D steer · Drag camera · C view · E sell · Shift run · U upgrade (৳${130 + state.level * 85}) · R restock${
                       state.level >= 10 ? ' · B big stall' : ''
                     }`
-                : 'WASD move · Space sprint · E capture · X operation after 5 arrests'}
+                : 'W/S move · A/D turn · Drag to look · C camera · Shift run · E capture'}
             </div>
           </div>
           <div className="w-32 h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-700">

@@ -33,6 +33,8 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Validate TypeScript
         run: bun run lint
+      - name: Test gameplay controls
+        run: bun test
       - name: Build for the GitHub Pages project path
         run: bun run build
         env:

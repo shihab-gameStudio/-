@@ -17,6 +17,8 @@ export class ThreeSceneManager {
   container: HTMLElement;
   animId: number = 0;
   acc: number = 0;
+  currentLookAt = new THREE.Vector3();
+  isFirstFrameCamera = true;
 
   constructor(container: HTMLElement, onUpdateHUD: () => void, onEvent: (type: string, data?: any) => void) {
     this.container = container;
@@ -372,10 +374,18 @@ export class ThreeSceneManager {
       targetCamPos = origin.clone().addScaledVector(direction, safeDistance);
     }
 
-    this.camera.position.lerp(targetCamPos, 0.15);
+    // Lerp camera position for smooth movement
+    this.camera.position.lerp(targetCamPos, 0.12);
 
-    const lookAtTarget = playerPosition.clone().addScaledVector(forward, 4).add(new THREE.Vector3(0, 2.2, 0));
-    this.camera.lookAt(lookAtTarget);
+    // Lerp target focus (lookAt) for smooth movement and reduced jitter during high-speed chases
+    const idealLookAt = playerPosition.clone().addScaledVector(forward, 4).add(new THREE.Vector3(0, 2.2, 0));
+    if (this.isFirstFrameCamera) {
+      this.currentLookAt.copy(idealLookAt);
+      this.isFirstFrameCamera = false;
+    } else {
+      this.currentLookAt.lerp(idealLookAt, 0.15);
+    }
+    this.camera.lookAt(this.currentLookAt);
   }
 
   resize() {

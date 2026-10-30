@@ -57,6 +57,7 @@ export default function App() {
   const [muted, setMuted] = useState(false);
 
   const keysRef = useRef<Set<string>>(new Set());
+  const actionRef = useRef<(key: string) => void>(() => {});
   const movementRef = useRef<MovementState>({ x: 0, z: 7, heading: 0, speed: 0 });
   const networkClockRef = useRef(0);
 
@@ -93,7 +94,7 @@ export default function App() {
       if (e.repeat) return;
       const normalized = key === 'arrowup' ? 'w' : key === 'arrowleft' ? 'a' : key === 'arrowright' ? 'd' : key === 'arrowdown' ? 's' : key;
       keysRef.current.add(normalized);
-      handleAction(normalized);
+      actionRef.current(normalized);
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -116,7 +117,7 @@ export default function App() {
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('blur', handleBlur);
     };
-  }, [state, modalData]);
+  }, []); // Do not tear down/rebind keyboard listeners on every HUD update.
 
   // Game action handler
   const handleAction = (k: string) => {
@@ -137,6 +138,8 @@ export default function App() {
       }
     }
   };
+
+  actionRef.current = handleAction;
 
   const handleMobileHold = (key: string, isDown: boolean) => {
     if (isDown) keysRef.current.add(key);

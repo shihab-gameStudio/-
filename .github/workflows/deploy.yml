@@ -8,6 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   pages: write
   id-token: write
@@ -62,6 +63,46 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # This repo still has legacy branch-based Pages publishing enabled.
+      # Wait until its automatic deployment finishes, then publish our compiled dist/ last.
+      - name: Wait for competing legacy Pages deployment
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 48); do
+            state="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?event=dynamic&per_page=30" --jq '[.workflow_runs[] | select(.head_sha == env.GITHUB_SHA and .name == "pages build and deployment")] | first | .status // "pending"' 2>/dev/null || echo pending)"
+            echo "Legacy Pages status for ${GITHUB_SHA}: ${state} (attempt ${attempt})"
+            if [ "${state}" = "completed" ]; then
+              echo "Legacy publishing completed; deploying the compiled game last."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::warning::Legacy Pages run not observed complete; proceeding with compiled deployment."
       - name: Deploy to production Pages
         id: deployment
         uses: actions/deploy-pages@v4
+      - name: Smoke test public production website
+        run: |
+          set -euo pipefail
+          site="https://shihab-gamestudio.github.io/-/"
+          for attempt in $(seq 1 36); do
+            html="$(curl -fsSL --max-time 15 "${site}" 2>/dev/null || true)"
+            script="$(printf '%s' "${html}" | grep -oE 'src="/-/assets/[^"]+\.js"' | head -1 | cut -d '"' -f2 || true)"
+            if [ -n "${script}" ] && ! printf '%s' "${html}" | grep -q '/src/main.tsx'; then
+              status="$(curl -LsS -o /dev/null -w '%{http_code}' --max-time 15 "https://shihab-gamestudio.github.io${script}" || true)"
+              favicon="$(curl -LsS -o /dev/null -w '%{http_code}' --max-time 15 "${site}favicon.svg" || true)"
+              if [ "${status}" = "200" ] && [ "${favicon}" = "200" ]; then
+                echo "PRODUCTION PASS: compiled HTML, JS (${script}), and favicon HTTP 200"
+                echo "Production URL: ${site}"
+                echo "Commit: ${GITHUB_SHA}"
+                exit 0
+              fi
+            fi
+            echo "Site not ready or still serving raw source (attempt ${attempt})."
+            sleep 5
+          done
+          echo "::error::Production HTML/assets did not pass runtime smoke test"
+          exit 1

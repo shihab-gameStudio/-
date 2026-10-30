@@ -8,7 +8,7 @@ import { GameHUD } from './components/GameHUD';
 import { EventModal } from './components/EventModal';
 import { MobileControls } from './components/MobileControls';
 import { RoomModal } from './components/RoomModal';
-import { productNames, street } from './game/constants';
+import { productNames } from './game/constants';
 
 export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -42,7 +42,7 @@ export default function App() {
     aiHeading: 0
   });
 
-  const [noticeText, setNoticeText] = useState('Welcome to Thela Dhaka! Choose your role.');
+  const [noticeText, setNoticeText] = useState('Welcome to ঠেলার নাম বাবাজি! Choose your role.');
   const [modalData, setModalData] = useState<{
     title: string;
     eyebrow: string;
@@ -320,7 +320,7 @@ export default function App() {
   const triggerGameOver = (text: string) => {
     setModalData({
       title: 'RUN OVER',
-      eyebrow: 'THELA DHAKA · ARCADE',
+      eyebrow: 'ঠেলার নাম বাবাজি · ARCADE',
       text,
       buttons: [
         {
@@ -627,7 +627,6 @@ export default function App() {
         simulate(Math.min(acc, 0.05));
         acc = 0;
       } else {
-        // Render smooth frame
         mgr.renderer.render(mgr.scene, mgr.camera);
         animId = requestAnimationFrame(loop);
       }

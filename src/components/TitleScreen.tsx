@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Role } from '../types/game';
-import { ShoppingCart, Shield, Users, Play, Radio } from 'lucide-react';
+import { ShoppingCart, Shield, Users, Play } from 'lucide-react';
 
 interface TitleScreenProps {
   onStartSolo: (role: Role) => void;
@@ -17,8 +17,8 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({ onStartSolo, onOpenRoo
           <div className="inline-block bg-[#1f4a3e] text-[#f2c45d] px-4 py-1 rounded-full text-xs font-semibold tracking-wider uppercase mb-2 border border-[#30705f]">
             ঢাকাইয়া স্ট্রিট সারভাইভাল · Dhaka Street Life 3D
           </div>
-          <h1 className="text-5xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#f2c45d] to-[#469c8b] font-['Hind_Siliguri']">
-            THELA DHAKA <span className="text-3xl block text-slate-300 font-sans mt-1">ঢাকার ঠেলা</span>
+          <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#f2c45d] to-[#469c8b] font-['Hind_Siliguri']">
+            ঠেলার নাম বাবাজি <span className="text-2xl sm:text-3xl block text-slate-300 font-sans mt-1">Thelar Nam Babaji</span>
           </h1>
           <p className="text-slate-400 text-sm max-w-md mx-auto">
             Navigate the bustling streets of Dhaka, sell authentic street goods from your wooden pushcart, evade enforcement heat, and build your street vending empire or patrol as police!
@@ -29,7 +29,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({ onStartSolo, onOpenRoo
         <div className="grid grid-cols-2 gap-4 pt-2">
           <button
             onClick={() => setSelectedRole('vendor')}
-            className={`p-5 rounded-xl border text-left transition-all flex flex-col justify-between ${
+            className={`p-5 rounded-xl border text-left transition-all flex flex-col justify-between cursor-pointer ${
               selectedRole === 'vendor'
                 ? 'bg-[#1f4a3e]/40 border-[#469c8b] shadow-lg shadow-[#469c8b]/10'
                 : 'bg-[#121c24]/50 border-slate-700 hover:border-slate-500'
@@ -46,7 +46,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({ onStartSolo, onOpenRoo
 
           <button
             onClick={() => setSelectedRole('police')}
-            className={`p-5 rounded-xl border text-left transition-all flex flex-col justify-between ${
+            className={`p-5 rounded-xl border text-left transition-all flex flex-col justify-between cursor-pointer ${
               selectedRole === 'police'
                 ? 'bg-[#1f4a3e]/40 border-[#469c8b] shadow-lg shadow-[#469c8b]/10'
                 : 'bg-[#121c24]/50 border-slate-700 hover:border-slate-500'
@@ -81,7 +81,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({ onStartSolo, onOpenRoo
           </button>
         </div>
 
-        <div className="text-[11px] text-slate-500 pt-2 border-t border-slate-800/80 flex items-center justify-center gap-4">
+        <div className="text-[11px] text-slate-500 pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-center gap-3 sm:gap-4">
           <span>WASD / Arrows to Move</span>
           <span>·</span>
           <span>Shift to Sprint</span>

@@ -1,6 +1,6 @@
 import React from 'react';
 import { GameState } from '../types/game';
-import { Volume2, VolumeX, Camera, HelpCircle, Pause } from 'lucide-react';
+import { Volume2, VolumeX, Camera, Pause } from 'lucide-react';
 
 interface GameHUDProps {
   state: GameState;
@@ -67,7 +67,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
         {/* Role & Utility Buttons */}
         <div className="flex items-center gap-3 pointer-events-auto">
           <div className="bg-[#121c24]/90 backdrop-blur-md border border-[#23423b] px-4 py-2 rounded-xl text-xs font-bold text-[#f2c45d]">
-            {isVendor ? '🛒 VENDOR · DHAKA' : '👮 POLICE · DHAKA'}
+            {isVendor ? '🛒 VENDOR · বাবাজি' : '👮 POLICE · বাবাজি'}
           </div>
 
           <button

@@ -9,6 +9,7 @@ import { EventModal } from './components/EventModal';
 import { MobileControls } from './components/MobileControls';
 import { RoomModal } from './components/RoomModal';
 import { productNames } from './game/constants';
+import { advanceMovement, MovementState } from './game/controls';
 
 export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -56,6 +57,8 @@ export default function App() {
   const [muted, setMuted] = useState(false);
 
   const keysRef = useRef<Set<string>>(new Set());
+  const movementRef = useRef<MovementState>({ x: 0, z: 7, heading: 0, speed: 0 });
+  const networkClockRef = useRef(0);
 
   const notify = (text: string) => {
     setNoticeText(text);
@@ -129,10 +132,8 @@ export default function App() {
       placeBigStall();
     } else if (k === 'c') {
       if (managerRef.current) {
-        const cam = managerRef.current.camera;
-        cam.fov = cam.fov === 66 ? 80 : 66;
-        cam.updateProjectionMatrix();
-        notify('Camera zoom changed');
+        const label = managerRef.current.cycleCameraPreset();
+        notify(`Camera: ${label} · drag to look, scroll to zoom`);
       }
     }
   };
@@ -370,8 +371,12 @@ export default function App() {
       aiHeading: 0
     });
 
+    movementRef.current = { x: 0, z: role === 'vendor' ? 7 : -23, heading: 0, speed: 0 };
+    networkClockRef.current = 0;
+    keysRef.current.clear();
     if (managerRef.current) {
       const mgr = managerRef.current;
+      mgr.resetCamera();
       mgr.human.visible = role === 'vendor';
       mgr.officer.visible = true;
       mgr.npcVendor.visible = role === 'police';
@@ -445,34 +450,10 @@ export default function App() {
         if (modalData || s.stage !== 'playing') return s;
         const newTime = s.time + dt;
 
-        // Move player
-        const p = s.role === 'vendor' ? mgr.human : mgr.officer;
-        const keys = keysRef.current;
-        const turn = (keys.has('a') ? 1 : 0) - (keys.has('d') ? 1 : 0);
-        const newHeading = s.heading + turn * dt * 2.15;
-        const throttle = (keys.has('w') ? 1 : 0) - (keys.has('s') ? 0.55 : 0);
-        const sprint = keys.has(' ') || keys.has('shift');
-        const speed = (s.role === 'vendor' ? 4.65 : 5.4) * (sprint ? 1.65 : 1) * throttle;
-
-        const nx = p.position.x + Math.sin(newHeading) * speed * dt;
-        const nz = p.position.z - Math.cos(newHeading) * speed * dt;
-        const invalid = mgr.obstacles.some(b => Math.abs(nx - b.x) < b.hw + 0.7 && Math.abs(nz - b.z) < b.hd + 0.7);
-
-        if (!invalid && Math.abs(nx) < 111 && Math.abs(nz) < 111) {
-          p.position.set(nx, 0, nz);
-          p.rotation.y = newHeading;
-        }
-
-        // Emit online position if in online mode
-        if (s.mode === 'online' && socketRef.current && roomCode && speed !== 0) {
-          socketRef.current.emit('player_move', {
-            code: roomCode,
-            role: s.role,
-            x: p.position.x,
-            z: p.position.z,
-            heading: newHeading
-          });
-        }
+        // Physics is updated synchronously at the render frame rate in loop().
+        // Read its latest values for HUD/economy updates; never move meshes in a React state updater.
+        const newHeading = movementRef.current.heading;
+        const speed = movementRef.current.speed;
 
         // AI / AI police pursuit
         let newHeat = s.heat;
@@ -608,28 +589,41 @@ export default function App() {
         };
       });
 
-      // Camera follow with Raycaster obstacle anti-clip check
-      const p = state.role === 'vendor' ? mgr.human : mgr.officer;
-      mgr.updateCamera(p.position, state.heading);
+    };
 
+    // Physics and follow camera update on every animation frame (not 22Hz React renders).
+    // The UI and NPC simulation can tick at 30Hz without causing choppy steering.
+    const loop = () => {
+      const dt = Math.min(clock.getDelta(), 0.05);
+      const player = state.role === 'vendor' ? mgr.human : mgr.officer;
+      if (!modalData) {
+        const next = advanceMovement(movementRef.current, keysRef.current, state.role, mgr.obstacles, dt);
+        movementRef.current = next;
+        player.position.set(next.x, 0, next.z);
+        player.rotation.y = next.heading;
+
+        // Keep the existing online position protocol, but cap network traffic.
+        networkClockRef.current += dt;
+        if (state.mode === 'online' && socketRef.current && roomCode && networkClockRef.current >= 0.05) {
+          networkClockRef.current = 0;
+          socketRef.current.emit('player_move', {
+            code: roomCode, role: state.role,
+            x: next.x, z: next.z, heading: next.heading
+          });
+        }
+
+        acc += dt;
+        if (acc >= 1 / 30) {
+          simulate(Math.min(acc, 0.10));
+          acc = 0;
+        }
+      }
+      mgr.updateCamera(player.position, movementRef.current.heading, dt);
       mgr.renderer.render(mgr.scene, mgr.camera);
       animId = requestAnimationFrame(loop);
     };
 
-    const loop = () => {
-      let dt = Math.min(clock.getDelta(), 0.05);
-      acc += dt;
-      if (acc > 0.045) {
-        simulate(Math.min(acc, 0.05));
-        acc = 0;
-      } else {
-        mgr.renderer.render(mgr.scene, mgr.camera);
-        animId = requestAnimationFrame(loop);
-      }
-    };
-
     animId = requestAnimationFrame(loop);
-
     return () => cancelAnimationFrame(animId);
   }, [stage, modalData, state.role, state.mode, roomCode]);
 
